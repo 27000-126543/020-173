@@ -4,13 +4,16 @@ import Taro, { useDidShow } from '@tarojs/taro'
 import styles from './index.module.scss'
 import { useApp } from '@/store/appContext'
 import { scenesData } from '@/data/scenes'
+import classnames from 'classnames'
 
 export default function MinePage() {
   const {
     userProgress,
     getTotalCompletedScenes,
     getTotalPracticedCards,
-    getAverageQuizScore
+    getAverageQuizScore,
+    isManager,
+    toggleManagerMode
   } = useApp()
 
   useDidShow(() => {
@@ -60,6 +63,8 @@ export default function MinePage() {
           try {
             Taro.removeStorageSync('userProgress')
             Taro.removeStorageSync('selfEvaluations')
+            Taro.removeStorageSync('phraseRecords')
+            Taro.removeStorageSync('publishedQuiz')
             Taro.showToast({
               title: '已清除数据',
               icon: 'success'
@@ -78,17 +83,31 @@ export default function MinePage() {
     })
   }
 
+  const handleToggleRole = () => {
+    toggleManagerMode()
+    Taro.showToast({
+      title: isManager ? '已切换为员工模式' : '已切换为店长模式',
+      icon: 'none'
+    })
+  }
+
   return (
     <View className={styles.page}>
       <View className={styles.header}>
         <View className={styles.userInfo}>
           <View className={styles.avatar}>
-            <Text>👩‍⚕️</Text>
+            <Text>{isManager ? '�' : '�👩‍⚕️'}</Text>
           </View>
           <View className={styles.userDetail}>
-            <Text className={styles.userName}>前台咨询师</Text>
+            <Text className={styles.userName}>{isManager ? '店长' : '前台咨询师'}</Text>
             <Text className={styles.userRole}>XX口腔诊所 · 入职30天</Text>
           </View>
+          <Button
+            className={styles.roleToggle}
+            onClick={handleToggleRole}
+          >
+            切换角色
+          </Button>
         </View>
       </View>
 

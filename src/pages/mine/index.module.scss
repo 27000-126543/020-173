@@ -43,6 +43,22 @@
       opacity: 0.9;
     }
   }
+
+  .roleToggle {
+    @include button-reset;
+    padding: $spacing-sm $spacing-md;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: $radius-button;
+    color: $color-text-white;
+    font-size: $font-size-xs;
+    border: 2rpx solid rgba(255, 255, 255, 0.3);
+    min-width: auto;
+    height: auto;
+    
+    &:active {
+      opacity: 0.8;
+    }
+  }
 }
 
 .content {

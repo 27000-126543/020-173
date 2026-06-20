@@ -6,63 +6,81 @@ import { getQuizById } from '@/data/quizzes'
 import { useApp } from '@/store/appContext'
 import { calculateProgress } from '@/utils'
 import classnames from 'classnames'
-import { QuizOption } from '@/types'
+import { QuizOption, QuizQuestion } from '@/types'
 
 export default function QuizDetailPage() {
   const router = useRouter()
   const quizId = router.params.id as string
   const isReview = router.params.review === '1'
-  const quiz = getQuizById(quizId)
-  const { updateQuizProgress, userProgress } = useApp()
+  const { updateQuizProgress, userProgress, getTodayQuizQuestions, publishedQuiz } = useApp()
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [selectedOption, setSelectedOption] = useState<QuizOption | null>(null)
   const [showResult, setShowResult] = useState(false)
   const [answers, setAnswers] = useState<Record<string, QuizOption>>({})
   const [showFinalResult, setShowFinalResult] = useState(false)
+  const [questions, setQuestions] = useState<QuizQuestion[]>([])
+  const [quizTitle, setQuizTitle] = useState('')
+  const [quizDescription, setQuizDescription] = useState('')
 
   useDidShow(() => {
     console.log('[QuizDetail] Page showed, quizId:', quizId, 'isReview:', isReview)
-    if (!quiz) {
-      Taro.showToast({
-        title: '测验不存在',
-        icon: 'error'
-      })
-      setTimeout(() => Taro.navigateBack(), 1000)
-    }
   })
 
   useEffect(() => {
-    if (quiz) {
-      Taro.setNavigationBarTitle({
-        title: quiz.title
-      })
-      
-      if (isReview) {
-        setShowFinalResult(true)
+    const todayQuestions = getTodayQuizQuestions()
+    
+    if (publishedQuiz && publishedQuiz.id === quizId && todayQuestions.length > 0) {
+      setQuestions(todayQuestions as any)
+      setQuizTitle(publishedQuiz.title)
+      setQuizDescription(publishedQuiz.description)
+    } else {
+      const quiz = getQuizById(quizId)
+      if (quiz) {
+        setQuestions(quiz.questions)
+        setQuizTitle(quiz.title)
+        setQuizDescription(quiz.description)
+      } else {
+        Taro.showToast({
+          title: '测验不存在',
+          icon: 'error'
+        })
+        setTimeout(() => Taro.navigateBack(), 1000)
       }
     }
-  }, [quiz, isReview])
 
-  const currentQuestion = quiz?.questions[currentQuestionIndex]
-  const totalQuestions = quiz?.questions.length || 0
+    if (isReview) {
+      setShowFinalResult(true)
+    }
+  }, [quizId, isReview, publishedQuiz, getTodayQuizQuestions])
+
+  useEffect(() => {
+    if (quizTitle) {
+      Taro.setNavigationBarTitle({
+        title: quizTitle
+      })
+    }
+  }, [quizTitle])
+
+  const currentQuestion = questions[currentQuestionIndex]
+  const totalQuestions = questions.length
 
   const existingResult = useMemo(() => {
     return userProgress.quizProgress[quizId] || null
   }, [userProgress, quizId])
 
   const handleOptionSelect = useCallback((option: QuizOption) => {
-    if (showResult) return
+    if (showResult || !currentQuestion) return
     setSelectedOption(option)
     setShowResult(true)
     setAnswers(prev => ({
       ...prev,
-      [currentQuestion!.id]: option
+      [currentQuestion.id]: option
     }))
   }, [showResult, currentQuestion])
 
   const handleNext = useCallback(() => {
-    if (!currentQuestion || !quiz) return
+    if (!currentQuestion || totalQuestions === 0) return
     
     if (currentQuestionIndex < totalQuestions - 1) {
       setCurrentQuestionIndex(prev => prev + 1)
@@ -72,7 +90,7 @@ export default function QuizDetailPage() {
       const wrongAnswers: string[] = []
       let correctCount = 0
       
-      quiz.questions.forEach(q => {
+      questions.forEach(q => {
         const userAnswer = answers[q.id]
         if (userAnswer?.id === q.correctAnswerId) {
           correctCount++
@@ -87,7 +105,7 @@ export default function QuizDetailPage() {
       
       console.log('[QuizDetail] Quiz completed, score:', score, 'wrong:', wrongAnswers)
     }
-  }, [currentQuestion, quiz, currentQuestionIndex, totalQuestions, answers, quizId, updateQuizProgress])
+  }, [currentQuestion, currentQuestionIndex, totalQuestions, answers, questions, quizId, updateQuizProgress])
 
   const handleExit = useCallback(() => {
     Taro.showModal({
@@ -115,7 +133,7 @@ export default function QuizDetailPage() {
     setShowFinalResult(false)
   }, [])
 
-  if (!quiz) {
+  if (questions.length === 0) {
     return (
       <View className={styles.page}>
         <Text>加载中...</Text>
@@ -125,15 +143,15 @@ export default function QuizDetailPage() {
 
   if (showFinalResult || isReview) {
     const result = existingResult || {
-      completed: Object.keys(answers).length === totalQuestions,
+      completed: Object.keys(answers).length === totalQuestions && totalQuestions > 0,
       score: 0,
       wrongAnswers: [] as string[]
     }
     
-    if (!existingResult && Object.keys(answers).length === totalQuestions) {
+    if (!existingResult && Object.keys(answers).length === totalQuestions && totalQuestions > 0) {
       let correctCount = 0
       const wrongAnswers: string[] = []
-      quiz.questions.forEach(q => {
+      questions.forEach(q => {
         const userAnswer = answers[q.id]
         if (userAnswer?.id === q.correctAnswerId) {
           correctCount++
@@ -145,60 +163,49 @@ export default function QuizDetailPage() {
       result.wrongAnswers = wrongAnswers
     }
     
-    const correctCount = totalQuestions - result.wrongAnswers.length
-    const wrongQuestions = quiz.questions.filter(q => result.wrongAnswers.includes(q.id))
-    
-    const getResultIcon = () => {
-      if (result.score >= 80) return '🎉'
-      if (result.score >= 60) return '👍'
-      return '💪'
-    }
-    
-    const getResultTitle = () => {
-      if (result.score >= 80) return '太棒了！'
-      if (result.score >= 60) return '还不错！'
-      return '继续加油！'
-    }
+    const wrongQuestions = questions.filter(q => result.wrongAnswers.includes(q.id))
+    const allCorrect = result.wrongAnswers.length === 0
 
     return (
       <View className={styles.resultPage}>
         <View className={styles.resultHeader}>
-          <Text className={styles.resultIcon}>{getResultIcon()}</Text>
-          <Text className={styles.resultTitle}>{getResultTitle()}</Text>
-          <Text className={styles.resultSubtitle}>
-            {isReview ? '查看测验结果' : `已完成「${quiz.title}」`}
+          <Text className={styles.resultIcon}>
+            {allCorrect ? '🎉' : '📝'}
           </Text>
-          
-          <View className={styles.scoreCircle}>
-            <Text className={styles.scoreNumber}>{result.score}</Text>
-            <Text className={styles.scoreLabel}>分</Text>
-          </View>
-          
-          <View className={styles.scoreBreakdown}>
-            <View className={styles.breakdownItem}>
-              <Text className={styles.breakdownNumber}>{correctCount}</Text>
-              <Text className={styles.breakdownLabel}>正确</Text>
+          <Text className={styles.resultTitle}>
+            {allCorrect ? '全部正确！' : '测验完成'}
+          </Text>
+          <Text className={styles.resultSubtitle}>
+            {isReview ? '查看本次测验易错点' : '已完成今日班前测验'}
+          </Text>
+
+          {allCorrect ? (
+            <View className={styles.allCorrectBox}>
+              <Text className={styles.allCorrectText}>
+                太棒了！本次测验全部答对，没有易错点
+              </Text>
+              <Text className={styles.allCorrectHint}>
+                继续保持，明天继续加油 💪
+              </Text>
             </View>
-            <View className={styles.breakdownItem}>
-              <Text className={styles.breakdownNumber}>{result.wrongAnswers.length}</Text>
-              <Text className={styles.breakdownLabel}>错误</Text>
+          ) : (
+            <View className={styles.mistakeSummary}>
+              <Text className={styles.summaryCount}>
+                本次共 <Text className={styles.highlight}>{result.wrongAnswers.length}</Text> 道易错题
+              </Text>
+              <Text className={styles.summaryHint}>
+                请重点复习以下题目，掌握正确话术
+              </Text>
             </View>
-            <View className={styles.breakdownItem}>
-              <Text className={styles.breakdownNumber}>{totalQuestions}</Text>
-              <Text className={styles.breakdownLabel}>总题数</Text>
-            </View>
-          </View>
+          )}
         </View>
 
-        <View className={styles.mistakesSection}>
-          <Text className={styles.sectionTitle}>
-            易错点回顾
-            {wrongQuestions.length > 0 && (
-              <Text className={styles.mistakesCount}>{wrongQuestions.length}题</Text>
-            )}
-          </Text>
-          
-          {wrongQuestions.length > 0 ? (
+        {wrongQuestions.length > 0 && (
+          <View className={styles.mistakesSection}>
+            <Text className={styles.sectionTitle}>
+              易错点回顾
+            </Text>
+            
             <View className={styles.mistakeList}>
               {wrongQuestions.map((q, index) => {
                 const correctOption = q.options.find(o => o.id === q.correctAnswerId)
@@ -206,9 +213,14 @@ export default function QuizDetailPage() {
                 
                 return (
                   <View key={q.id} className={styles.mistakeCard}>
-                    <Text className={styles.mistakeQuestion}>
-                      {index + 1}. {q.question}
-                    </Text>
+                    <View className={styles.mistakeHeader}>
+                      <View className={styles.mistakeIndex}>
+                        {index + 1}
+                      </View>
+                      <Text className={styles.mistakeQuestion}>
+                        {q.question}
+                      </Text>
+                    </View>
                     
                     {userAnswer && (
                       <View className={styles.mistakeRow}>
@@ -220,7 +232,7 @@ export default function QuizDetailPage() {
                     )}
                     
                     <View className={styles.mistakeRow}>
-                      <Text className={styles.rowLabel}>正确答案</Text>
+                      <Text className={styles.rowLabel}>正确说法</Text>
                       <Text className={classnames(styles.rowContent, styles.correct)}>
                         ✓ {correctOption?.text}
                       </Text>
@@ -234,15 +246,8 @@ export default function QuizDetailPage() {
                 )
               })}
             </View>
-          ) : (
-            <View className={styles.noMistakes}>
-              <Text className={styles.noMistakesIcon}>🎊</Text>
-              <Text className={styles.noMistakesText}>
-                太棒了！本次测验全部正确，没有易错点
-              </Text>
-            </View>
-          )}
-        </View>
+          </View>
+        )}
 
         <View className={styles.actionButtons}>
           <Button
@@ -277,8 +282,8 @@ export default function QuizDetailPage() {
   return (
     <View className={styles.page}>
       <View className={styles.header}>
-        <Text className={styles.quizTitle}>{quiz.title}</Text>
-        <Text className={styles.quizDesc}>{quiz.description}</Text>
+        <Text className={styles.quizTitle}>{quizTitle}</Text>
+        <Text className={styles.quizDesc}>{quizDescription}</Text>
         <Text className={styles.progressText}>
           第 {currentQuestionIndex + 1}/{totalQuestions} 题
         </Text>
@@ -338,7 +343,7 @@ export default function QuizDetailPage() {
           })}
         >
           <Text className={styles.explanationLabel}>
-            {isCorrect ? '✨ 回答正确！' : '💡 解析'}
+            {isCorrect ? '✨ 回答正确！' : '💡 要点解析'}
           </Text>
           <Text className={styles.explanationText}>
             {currentQuestion.explanation}

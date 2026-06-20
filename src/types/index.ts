@@ -74,3 +74,34 @@ export interface SelfEvaluation {
   politeness: number
   comment: string
 }
+
+export interface PhraseRecord {
+  phraseId: string
+  audioUrl: string
+  duration: number
+  createdAt: string
+}
+
+export interface QuizQuestionBank {
+  id: string
+  question: string
+  options: QuizOption[]
+  correctAnswerId: string
+  explanation: string
+  isEasyMistake?: boolean
+  category: string
+}
+
+export interface PublishedQuiz {
+  id: string
+  date: string
+  title: string
+  description: string
+  questionIds: string[]
+  publishedBy: string
+  publishedAt: string
+}
+
+export interface UserRole {
+  isManager: boolean
+}

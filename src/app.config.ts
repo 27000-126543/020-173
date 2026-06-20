@@ -6,7 +6,8 @@ export default defineAppConfig({
     'pages/mine/index',
     'pages/scene-detail/index',
     'pages/read-detail/index',
-    'pages/quiz-detail/index'
+    'pages/quiz-detail/index',
+    'pages/publish-quiz/index'
   ],
   window: {
     backgroundTextStyle: 'light',

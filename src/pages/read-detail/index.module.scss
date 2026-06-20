@@ -293,6 +293,14 @@
           opacity: 0.9;
         }
       }
+
+      .savedHint {
+        display: block;
+        text-align: center;
+        font-size: $font-size-xs;
+        color: $color-correct;
+        margin-top: $spacing-md;
+      }
     }
   }
 }
