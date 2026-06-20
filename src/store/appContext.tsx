@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo } from 'react'
 import Taro from '@tarojs/taro'
-import { UserProgress, SelfEvaluation, PhraseRecord, QuizQuestionBank, PublishedQuiz } from '@/types'
+import { UserProgress, SelfEvaluation, PhraseRecord, QuizQuestionBank, PublishedQuiz, QuizProgressItem } from '@/types'
+import { quizzesData } from '@/data/quizzes'
 import { getStorageItem, setStorageItem, generateId, getTodayString } from '@/utils'
 
 interface AppContextType {
@@ -239,11 +240,71 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const questionBank = useMemo(() => defaultQuestionBank, [])
 
   useEffect(() => {
-    const progress = getStorageItem<UserProgress>('userProgress', defaultProgress)
+    let progress = getStorageItem<UserProgress>('userProgress', defaultProgress)
     const evaluations = getStorageItem<Record<string, SelfEvaluation>>('selfEvaluations', {})
     const records = getStorageItem<Record<string, PhraseRecord>>('phraseRecords', {})
     const managerMode = getStorageItem<boolean>('isManager', false)
     const published = getStorageItem<PublishedQuiz | null>('publishedQuiz', null)
+
+    const historicalProgress: Record<string, QuizProgressItem> = {}
+    quizzesData.forEach(quiz => {
+      if (quiz.completed && !progress.quizProgress[quiz.id]) {
+        const correctCount = Math.round((quiz.score || 100) * quiz.questions.length / 100)
+        const wrongCount = quiz.questions.length - correctCount
+        
+        const userAnswers: Record<string, string> = {}
+        const wrongAnswers: string[] = []
+        
+        let remainingWrong = wrongCount
+        const easyMistakes = quiz.questions.filter(q => q.isEasyMistake && remainingWrong > 0)
+        const otherQuestions = quiz.questions.filter(q => !q.isEasyMistake)
+        
+        for (const q of easyMistakes) {
+          if (remainingWrong <= 0) break
+          const wrongOption = q.options.find(o => o.id !== q.correctAnswerId)
+          if (wrongOption) {
+            userAnswers[q.id] = wrongOption.id
+            wrongAnswers.push(q.id)
+            remainingWrong--
+          }
+        }
+        
+        for (const q of otherQuestions) {
+          if (remainingWrong <= 0) break
+          const wrongOption = q.options.find(o => o.id !== q.correctAnswerId)
+          if (wrongOption) {
+            userAnswers[q.id] = wrongOption.id
+            wrongAnswers.push(q.id)
+            remainingWrong--
+          }
+        }
+        
+        quiz.questions.forEach(q => {
+          if (!userAnswers[q.id]) {
+            userAnswers[q.id] = q.correctAnswerId
+          }
+        })
+
+        historicalProgress[quiz.id] = {
+          completed: true,
+          score: quiz.score || 100,
+          wrongAnswers,
+          userAnswers,
+          completedAt: quiz.date ? new Date(quiz.date + 'T09:00:00').toISOString() : new Date().toISOString()
+        }
+      }
+    })
+
+    if (Object.keys(historicalProgress).length > 0) {
+      progress = {
+        ...progress,
+        quizProgress: {
+          ...progress.quizProgress,
+          ...historicalProgress
+        }
+      }
+      setStorageItem('userProgress', progress)
+    }
 
     setUserProgress(progress)
     setSelfEvaluations(evaluations)

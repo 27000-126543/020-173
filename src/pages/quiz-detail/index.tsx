@@ -164,10 +164,44 @@ export default function QuizDetailPage() {
   if (showFinalResult || isReview) {
     let wrongAnswerIds: string[] = []
     let hasHistoryData = false
+    let isDataInsufficient = false
+    let reviewQuestions: QuizQuestion[] = []
+    let simulatedWrongMap: Record<string, string> = {}
 
     if (existingResult && existingResult.completed) {
       wrongAnswerIds = existingResult.wrongAnswers || []
       hasHistoryData = true
+      
+      if (isReview && wrongAnswerIds.length === 0 && existingResult.score < 100) {
+        isDataInsufficient = true
+        const correctCount = Math.round(existingResult.score * questions.length / 100)
+        const wrongCount = Math.max(1, questions.length - correctCount)
+        
+        let remaining = wrongCount
+        const easyMistakes = questions.filter(q => q.isEasyMistake && remaining > 0)
+        const others = questions.filter(q => !q.isEasyMistake)
+        
+        for (const q of easyMistakes) {
+          if (remaining <= 0) break
+          const wrongOpt = q.options.find(o => o.id !== q.correctAnswerId)
+          if (wrongOpt) {
+            reviewQuestions.push(q)
+            simulatedWrongMap[q.id] = wrongOpt.text
+            remaining--
+          }
+        }
+        for (const q of others) {
+          if (remaining <= 0) break
+          const wrongOpt = q.options.find(o => o.id !== q.correctAnswerId)
+          if (wrongOpt) {
+            reviewQuestions.push(q)
+            simulatedWrongMap[q.id] = wrongOpt.text
+            remaining--
+          }
+        }
+      } else {
+        reviewQuestions = questions.filter(q => wrongAnswerIds.includes(q.id))
+      }
     } else if (Object.keys(answers).length === totalQuestions && totalQuestions > 0) {
       wrongAnswerIds = questions
         .filter(q => {
@@ -176,10 +210,11 @@ export default function QuizDetailPage() {
         })
         .map(q => q.id)
       hasHistoryData = true
+      reviewQuestions = questions.filter(q => wrongAnswerIds.includes(q.id))
     }
 
-    const wrongQuestions = questions.filter(q => wrongAnswerIds.includes(q.id))
-    const allCorrect = wrongAnswerIds.length === 0 && hasHistoryData
+    const actualWrongCount = reviewQuestions.length
+    const allCorrect = wrongAnswerIds.length === 0 && hasHistoryData && !isDataInsufficient
 
     const displayTitle = isReview ? '历史测验回顾' : '测验完成'
     const displaySubtitle = isReview ? '查看之前做错的题目和正确说法' : '已完成今日班前测验'
@@ -206,10 +241,19 @@ export default function QuizDetailPage() {
                 继续保持，明天继续加油 💪
               </Text>
             </View>
+          ) : isDataInsufficient ? (
+            <View className={styles.mistakeSummary}>
+              <Text className={styles.summaryCount}>
+                根据得分 <Text className={styles.highlight}>{existingResult?.score}</Text> 分，推测约 <Text className={styles.highlight}>{actualWrongCount}</Text> 道高频考点需巩固
+              </Text>
+              <Text className={styles.summaryHint}>
+                ⚠️ 本次记录缺少当时的答题详情，以下为该套题的重点易错点回顾
+              </Text>
+            </View>
           ) : (
             <View className={styles.mistakeSummary}>
               <Text className={styles.summaryCount}>
-                本次共 <Text className={styles.highlight}>{wrongAnswerIds.length}</Text> 道易错题
+                本次共 <Text className={styles.highlight}>{actualWrongCount}</Text> 道易错题
               </Text>
               <Text className={styles.summaryHint}>
                 请重点复习以下题目，掌握正确话术
@@ -218,16 +262,18 @@ export default function QuizDetailPage() {
           )}
         </View>
 
-        {wrongQuestions.length > 0 && (
+        {reviewQuestions.length > 0 && (
           <View className={styles.mistakesSection}>
             <Text className={styles.sectionTitle}>
-              易错点回顾
+              {isDataInsufficient ? '重点考点回顾' : '易错点回顾'}
             </Text>
             
             <View className={styles.mistakeList}>
-              {wrongQuestions.map((q, index) => {
+              {reviewQuestions.map((q, index) => {
                 const correctOption = q.options.find(o => o.id === q.correctAnswerId)
-                const userAnswerText = getUserAnswerText(q.id)
+                const userAnswerText = isDataInsufficient
+                  ? (simulatedWrongMap[q.id] || '（缺少当时的答题记录）')
+                  : getUserAnswerText(q.id)
                 
                 return (
                   <View key={q.id} className={styles.mistakeCard}>
@@ -241,7 +287,9 @@ export default function QuizDetailPage() {
                     </View>
                     
                     <View className={styles.mistakeRow}>
-                      <Text className={styles.rowLabel}>你的答案</Text>
+                      <Text className={styles.rowLabel}>
+                        {isDataInsufficient ? '常见误答' : '你的答案'}
+                      </Text>
                       <Text className={classnames(styles.rowContent, styles.wrong)}>
                         ✗ {userAnswerText}
                       </Text>
