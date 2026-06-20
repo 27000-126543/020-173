@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { View, Text, Button, Input } from '@tarojs/components'
 import Taro, { useRouter, useDidShow } from '@tarojs/taro'
 import styles from './index.module.scss'
@@ -22,12 +22,9 @@ export default function ReadDetailPage() {
   } = useApp()
 
   const [currentPhraseIndex, setCurrentPhraseIndex] = useState(0)
-  const [isPlaying, setIsPlaying] = useState(false)
   const [completedPhrases, setCompletedPhrases] = useState<Set<string>>(new Set())
   const [showComplete, setShowComplete] = useState(false)
   const [localEvaluations, setLocalEvaluations] = useState<Record<string, SelfEvaluation>>({})
-  
-  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const currentPhrase = card?.phrases[currentPhraseIndex]
   const totalPhrases = card?.phrases.length || 0
@@ -35,12 +32,15 @@ export default function ReadDetailPage() {
   const {
     isRecording,
     recordTime,
-    audioUrl,
     duration,
+    isPlaying,
+    audioBase64,
     startRecording,
     stopRecording,
     resetRecording,
-    loadSavedAudio
+    loadSavedAudio,
+    playAudio,
+    stopPlayback
   } = useRecorder({
     onStop: (base64Data, dur) => {
       if (currentPhrase && card) {
@@ -95,11 +95,14 @@ export default function ReadDetailPage() {
 
   useEffect(() => {
     if (currentPhrase) {
+      stopPlayback()
       resetRecording()
       
       const savedRecord = phraseRecords[currentPhrase.id]
       if (savedRecord?.audioBase64) {
-        loadSavedAudio(savedRecord.audioBase64, savedRecord.duration)
+        setTimeout(() => {
+          loadSavedAudio(savedRecord.audioBase64, savedRecord.duration)
+        }, 50)
       }
       
       const savedEval = selfEvaluations[currentPhrase.id]
@@ -116,20 +119,12 @@ export default function ReadDetailPage() {
         })
       }
     }
-    
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause()
-        audioRef.current = null
-      }
-      setIsPlaying(false)
-    }
-  }, [currentPhrase, phraseRecords, selfEvaluations, resetRecording, loadSavedAudio])
+  }, [currentPhrase?.id, phraseRecords, selfEvaluations, resetRecording, loadSavedAudio, stopPlayback])
 
   const hasRecording = useCallback(() => {
     if (!currentPhrase) return false
-    return !!audioUrl || !!phraseRecords[currentPhrase.id]?.audioBase64
-  }, [currentPhrase, audioUrl, phraseRecords])
+    return !!audioBase64 || !!phraseRecords[currentPhrase.id]?.audioBase64
+  }, [currentPhrase, audioBase64, phraseRecords])
 
   const getCurrentDuration = () => {
     if (!currentPhrase) return 0
@@ -158,7 +153,7 @@ export default function ReadDetailPage() {
     
     const savedRecord = phraseRecords[currentPhrase.id]
     
-    if (!audioUrl && !savedRecord?.audioBase64) {
+    if (!audioBase64 && !savedRecord?.audioBase64) {
       Taro.showToast({
         title: '请先录音',
         icon: 'none'
@@ -167,53 +162,18 @@ export default function ReadDetailPage() {
     }
 
     if (isPlaying) {
-      if (audioRef.current) {
-        audioRef.current.pause()
-        audioRef.current = null
+      stopPlayback()
+    } else {
+      if (!audioBase64 && savedRecord?.audioBase64) {
+        loadSavedAudio(savedRecord.audioBase64, savedRecord.duration)
+        setTimeout(() => {
+          playAudio()
+        }, 200)
+      } else {
+        playAudio()
       }
-      setIsPlaying(false)
-      return
     }
-
-    let urlToPlay = audioUrl
-    if (!urlToPlay && savedRecord?.audioBase64) {
-      urlToPlay = loadSavedAudio(savedRecord.audioBase64, savedRecord.duration) || ''
-    }
-
-    if (!urlToPlay) {
-      Taro.showToast({
-        title: '播放失败',
-        icon: 'none'
-      })
-      return
-    }
-
-    const audio = new Audio(urlToPlay)
-    audioRef.current = audio
-    audio.onended = () => {
-      setIsPlaying(false)
-      audioRef.current = null
-    }
-    audio.onerror = () => {
-      console.error('[ReadDetail] Audio playback error')
-      Taro.showToast({
-        title: '播放失败',
-        icon: 'none'
-      })
-      setIsPlaying(false)
-      audioRef.current = null
-    }
-    audio.play().catch(err => {
-      console.error('[ReadDetail] Playback error:', err)
-      Taro.showToast({
-        title: '播放失败',
-        icon: 'none'
-      })
-      setIsPlaying(false)
-      audioRef.current = null
-    })
-    setIsPlaying(true)
-  }, [currentPhrase, phraseRecords, audioUrl, isPlaying, loadSavedAudio])
+  }, [currentPhrase, phraseRecords, audioBase64, isPlaying, playAudio, stopPlayback, loadSavedAudio])
 
   const getCurrentEvaluation = (): SelfEvaluation | null => {
     if (!currentPhrase) return null
@@ -323,11 +283,11 @@ export default function ReadDetailPage() {
   const handleRetry = useCallback(() => {
     setCurrentPhraseIndex(0)
     resetRecording()
-    setIsPlaying(false)
+    stopPlayback()
     setCompletedPhrases(new Set())
     setShowComplete(false)
     setLocalEvaluations({})
-  }, [resetRecording])
+  }, [resetRecording, stopPlayback])
 
   if (!card || !currentPhrase) {
     return (

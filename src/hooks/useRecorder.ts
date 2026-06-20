@@ -34,6 +34,8 @@ export function useRecorder(options: UseRecorderOptions = {}) {
   const [duration, setDuration] = useState(0)
   const [permissionState, setPermissionState] = useState<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown')
   const [errorMessage, setErrorMessage] = useState<string>('')
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [audioBase64, setAudioBase64] = useState<string>('')
 
   const platform = getPlatform()
 
@@ -44,6 +46,10 @@ export function useRecorder(options: UseRecorderOptions = {}) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const weappRecorderRef = useRef<any>(null)
   const weappTempFilePathRef = useRef<string>('')
+  const weappAudioCtxRef = useRef<any>(null)
+  const weappSavedFilePathRef = useRef<string>('')
+  const h5AudioRef = useRef<HTMLAudioElement | null>(null)
+  const hasListenersRef = useRef(false)
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -56,7 +62,7 @@ export function useRecorder(options: UseRecorderOptions = {}) {
     clearTimer()
     currentDurationRef.current = 0
     setRecordTime(0)
-    timerRef.current = window.setInterval(() => {
+    timerRef.current = (window.setInterval as any)(() => {
       currentDurationRef.current += 1
       setRecordTime(prev => prev + 1)
     }, 1000)
@@ -105,6 +111,122 @@ export function useRecorder(options: UseRecorderOptions = {}) {
     }
   }, [audioUrl])
 
+  const stopPlayback = useCallback(() => {
+    if (platform === 'weapp') {
+      if (weappAudioCtxRef.current) {
+        try {
+          weappAudioCtxRef.current.stop()
+        } catch (e) {}
+      }
+    } else {
+      if (h5AudioRef.current) {
+        try {
+          h5AudioRef.current.pause()
+          h5AudioRef.current.currentTime = 0
+        } catch (e) {}
+      }
+    }
+    setIsPlaying(false)
+  }, [platform])
+
+  const setupWeappAudioContext = useCallback((src: string) => {
+    if (!weappAudioCtxRef.current) {
+      weappAudioCtxRef.current = Taro.createInnerAudioContext()
+    }
+    const ctx = weappAudioCtxRef.current
+    ctx.src = src
+
+    if (!hasListenersRef.current) {
+      hasListenersRef.current = true
+      ctx.onPlay(() => {
+        setIsPlaying(true)
+      })
+      ctx.onPause(() => {
+        setIsPlaying(false)
+      })
+      ctx.onStop(() => {
+        setIsPlaying(false)
+      })
+      ctx.onEnded(() => {
+        setIsPlaying(false)
+      })
+      ctx.onError((err: any) => {
+        console.error('[useRecorder] Weapp audio error:', err)
+        setIsPlaying(false)
+        Taro.showToast({ title: '播放失败', icon: 'none' })
+      })
+    }
+    return ctx
+  }, [])
+
+  const playAudio = useCallback(() => {
+    const src = audioUrl || weappSavedFilePathRef.current
+    if (!src && !audioBase64) {
+      Taro.showToast({ title: '请先录音', icon: 'none' })
+      return
+    }
+
+    stopPlayback()
+
+    if (platform === 'weapp') {
+      let playSrc = weappSavedFilePathRef.current || audioUrl
+      
+      if (!playSrc && audioBase64) {
+        const fs = Taro.getFileSystemManager()
+        const filePath = `${Taro.env.USER_DATA_PATH}/record_${Date.now()}.mp3`
+        const base64Data = audioBase64.split(',')[1] || audioBase64
+        
+        fs.writeFile({
+          filePath,
+          data: base64Data,
+          encoding: 'base64',
+          success: () => {
+            weappSavedFilePathRef.current = filePath
+            const ctx = setupWeappAudioContext(filePath)
+            ctx.play()
+          },
+          fail: (err: any) => {
+            console.error('[useRecorder] Write base64 to file failed:', err)
+            Taro.showToast({ title: '播放失败', icon: 'none' })
+          }
+        })
+        return
+      }
+
+      if (playSrc) {
+        const ctx = setupWeappAudioContext(playSrc)
+        ctx.play()
+      }
+    } else {
+      let urlToPlay = audioUrl
+      if (!urlToPlay && audioBase64) {
+        urlToPlay = createAudioUrlFromBase64(audioBase64)
+        setAudioUrl(urlToPlay)
+      }
+      
+      if (urlToPlay) {
+        try {
+          const audio = new Audio(urlToPlay)
+          h5AudioRef.current = audio
+          audio.onended = () => setIsPlaying(false)
+          audio.onerror = () => {
+            setIsPlaying(false)
+            Taro.showToast({ title: '播放失败', icon: 'none' })
+          }
+          audio.play().catch(err => {
+            console.error('[useRecorder] Play error:', err)
+            setIsPlaying(false)
+            Taro.showToast({ title: '播放失败', icon: 'none' })
+          })
+          setIsPlaying(true)
+        } catch (e) {
+          console.error('[useRecorder] Play error:', e)
+          Taro.showToast({ title: '播放失败', icon: 'none' })
+        }
+      }
+    }
+  }, [platform, audioUrl, audioBase64, stopPlayback, setupWeappAudioContext, createAudioUrlFromBase64])
+
   const handleRecordingStop = useCallback(async (audioData: {
     url?: string
     blob?: Blob
@@ -114,6 +236,7 @@ export function useRecorder(options: UseRecorderOptions = {}) {
     setIsRecording(false)
     clearTimer()
     stopStream()
+    stopPlayback()
 
     try {
       let finalBase64 = audioData.base64 || ''
@@ -123,14 +246,25 @@ export function useRecorder(options: UseRecorderOptions = {}) {
         finalBase64 = await blobToBase64(audioData.blob)
       }
 
-      if (!finalUrl && audioData.blob) {
-        finalUrl = URL.createObjectURL(audioData.blob)
-      } else if (!finalUrl && finalBase64 && platform === 'h5') {
-        finalUrl = createAudioUrlFromBase64(finalBase64)
+      if (platform === 'h5') {
+        if (audioData.blob) {
+          finalUrl = URL.createObjectURL(audioData.blob)
+        } else if (finalBase64 && !finalUrl) {
+          finalUrl = createAudioUrlFromBase64(finalBase64)
+        }
       }
 
-      revokeAudioUrl()
+      if (platform === 'weapp' && audioData.url) {
+        weappTempFilePathRef.current = audioData.url
+        finalUrl = audioData.url
+      }
+
+      if (platform === 'h5') {
+        revokeAudioUrl()
+      }
+      
       setAudioUrl(finalUrl)
+      setAudioBase64(finalBase64)
       setDuration(audioData.duration)
 
       if (finalBase64) {
@@ -138,14 +272,22 @@ export function useRecorder(options: UseRecorderOptions = {}) {
       }
 
       setTimeout(() => {
-        if (finalUrl || finalBase64) {
+        if (platform === 'weapp') {
+          if (finalUrl) {
+            const ctx = setupWeappAudioContext(finalUrl)
+            ctx.play()
+          }
+        } else {
           const urlToPlay = finalUrl || (finalBase64 && platform === 'h5' ? createAudioUrlFromBase64(finalBase64) : '')
           if (urlToPlay) {
             try {
               const audio = new Audio(urlToPlay)
+              h5AudioRef.current = audio
+              audio.onended = () => setIsPlaying(false)
               audio.play().catch(e => {
                 console.warn('[useRecorder] Auto play failed:', e)
               })
+              setIsPlaying(true)
             } catch (e) {
               console.warn('[useRecorder] Auto play error:', e)
             }
@@ -160,7 +302,43 @@ export function useRecorder(options: UseRecorderOptions = {}) {
       Taro.showToast({ title: msg, icon: 'none' })
       options.onError?.(err, 'other')
     }
-  }, [blobToBase64, createAudioUrlFromBase64, clearTimer, stopStream, revokeAudioUrl, options, platform])
+  }, [blobToBase64, createAudioUrlFromBase64, clearTimer, stopStream, stopPlayback, revokeAudioUrl, options, platform, setupWeappAudioContext])
+
+  const openPermissionSetting = useCallback(() => {
+    if (platform === 'weapp') {
+      Taro.openSetting({
+        success: (res) => {
+          if (res.authSetting['scope.record']) {
+            setPermissionState('granted')
+            Taro.showToast({ title: '权限已开启', icon: 'success' })
+            setTimeout(() => startRecording(), 500)
+          } else {
+            setPermissionState('denied')
+            Taro.showToast({ title: '未开启麦克风权限', icon: 'none' })
+          }
+        },
+        fail: (err) => {
+          console.error('[useRecorder] openSetting failed:', err)
+        }
+      })
+    }
+  }, [platform])
+
+  const showPermissionError = useCallback(() => {
+    Taro.showModal({
+      title: '需要麦克风权限',
+      content: '请在微信设置中开启麦克风权限，以便进行话术录音练习',
+      confirmText: '去设置',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          openPermissionSetting()
+        } else {
+          setPermissionState('denied')
+        }
+      }
+    })
+  }, [openPermissionSetting])
 
   const showError = useCallback((msg: string, type: 'permission' | 'notSupported' | 'other', error?: any) => {
     console.error('[useRecorder] Error:', msg, error)
@@ -169,21 +347,29 @@ export function useRecorder(options: UseRecorderOptions = {}) {
     clearTimer()
     stopStream()
 
-    Taro.showModal({
-      title: '录音失败',
-      content: msg,
-      showCancel: type === 'permission',
-      confirmText: '知道了',
-      cancelText: '重新授权',
-      success: (res) => {
-        if (res.cancel) {
-          setTimeout(() => startRecording(), 200)
+    if (type === 'permission' && platform === 'weapp') {
+      Taro.showModal({
+        title: '录音失败',
+        content: msg,
+        confirmText: '去设置',
+        cancelText: '知道了',
+        success: (res) => {
+          if (res.confirm) {
+            openPermissionSetting()
+          }
         }
-      }
-    })
+      })
+    } else {
+      Taro.showModal({
+        title: '录音失败',
+        content: msg,
+        showCancel: false,
+        confirmText: '知道了'
+      })
+    }
 
     options.onError?.(error || new Error(msg), type)
-  }, [clearTimer, stopStream, options])
+  }, [clearTimer, stopStream, options, platform, openPermissionSetting])
 
   const startRecordingWeapp = useCallback(() => {
     try {
@@ -199,12 +385,11 @@ export function useRecorder(options: UseRecorderOptions = {}) {
         startTimer()
         setPermissionState('granted')
         options.onStart?.()
-        console.log('[useRecorder] Weapp recording started')
       })
 
       recorder.onStop(async (res: any) => {
         if (hasError) return
-        const durationSec = Math.round((res.duration || 0) / 1000)
+        const durationSec = Math.max(1, Math.round((res.duration || 0) / 1000))
         weappTempFilePathRef.current = res.tempFilePath || ''
 
         if (Taro.getFileSystemManager && res.tempFilePath) {
@@ -214,16 +399,32 @@ export function useRecorder(options: UseRecorderOptions = {}) {
               filePath: res.tempFilePath,
               encoding: 'base64',
               success: (readRes: any) => {
-                const mimeType = res.mp3Encoded ? 'audio/mpeg' : 'audio/webm'
+                const mimeType = 'audio/mpeg'
                 const base64Data = `data:${mimeType};base64,${readRes.data}`
-                handleRecordingStop({
-                  url: res.tempFilePath,
-                  base64: base64Data,
-                  duration: durationSec || currentDurationRef.current
+                
+                const savedPath = `${Taro.env.USER_DATA_PATH}/record_${Date.now()}.mp3`
+                fs.writeFile({
+                  filePath: savedPath,
+                  data: readRes.data,
+                  encoding: 'base64',
+                  success: () => {
+                    weappSavedFilePathRef.current = savedPath
+                    handleRecordingStop({
+                      url: savedPath,
+                      base64: base64Data,
+                      duration: durationSec || currentDurationRef.current
+                    })
+                  },
+                  fail: () => {
+                    handleRecordingStop({
+                      url: res.tempFilePath,
+                      base64: base64Data,
+                      duration: durationSec || currentDurationRef.current
+                    })
+                  }
                 })
               },
-              fail: (err: any) => {
-                console.warn('[useRecorder] Weapp read file failed, use temp path:', err)
+              fail: () => {
                 handleRecordingStop({
                   url: res.tempFilePath,
                   base64: '',
@@ -267,62 +468,78 @@ export function useRecorder(options: UseRecorderOptions = {}) {
         showError(msg, errorType, err)
       })
 
-      Taro.authorize({
-        scope: 'scope.record',
-        success: () => {
-          console.log('[useRecorder] Weapp record permission authorized')
-          setPermissionState('granted')
-          try {
-            recorder.start({
-              duration: 600000,
-              sampleRate: 44100,
-              numberOfChannels: 1,
-              encodeBitRate: 192000,
-              format: 'mp3'
-            })
-          } catch (e) {
-            try {
-              recorder.start()
-            } catch (e2) {
-              showError('启动录音失败，请重试', 'other', e2)
-            }
+      Taro.getSetting({
+        success: (setting) => {
+          const recordAuth = setting.authSetting['scope.record']
+          
+          if (recordAuth === false) {
+            setPermissionState('denied')
+            showPermissionError()
+            return
           }
-        },
-        fail: (authErr: any) => {
-          console.warn('[useRecorder] Weapp authorize failed:', authErr)
-          if (authErr?.errMsg?.includes('cancel') || authErr?.errMsg?.includes('deny')) {
-            showError('麦克风权限被拒绝，请在微信设置中开启麦克风权限后重试', 'permission', authErr)
-          } else {
-            Taro.getSetting({
-              success: (setting) => {
-                if (setting.authSetting['scope.record'] === false) {
-                  Taro.showModal({
-                    title: '需要麦克风权限',
-                    content: '请在微信设置中开启麦克风权限，以便进行话术录音练习',
-                    confirmText: '去设置',
-                    success: (modalRes) => {
-                      if (modalRes.confirm) {
-                        Taro.openSetting()
-                      } else {
-                        showError('麦克风权限被拒绝，请在设置中开启后重试', 'permission', authErr)
-                      }
-                    }
-                  })
-                } else {
-                  showError('获取麦克风权限失败，请重试', 'permission', authErr)
+
+          Taro.authorize({
+            scope: 'scope.record',
+            success: () => {
+              setPermissionState('granted')
+              try {
+                recorder.start({
+                  duration: 600000,
+                  sampleRate: 44100,
+                  numberOfChannels: 1,
+                  encodeBitRate: 192000,
+                  format: 'mp3'
+                })
+              } catch (e) {
+                try {
+                  recorder.start()
+                } catch (e2) {
+                  showError('启动录音失败，请重试', 'other', e2)
                 }
-              },
-              fail: () => {
+              }
+            },
+            fail: (authErr: any) => {
+              if (authErr?.errMsg?.includes('cancel') || authErr?.errMsg?.includes('deny')) {
+                setPermissionState('denied')
+                showPermissionError()
+              } else {
                 showError('获取麦克风权限失败，请重试', 'permission', authErr)
               }
-            })
-          }
+            }
+          })
+        },
+        fail: () => {
+          Taro.authorize({
+            scope: 'scope.record',
+            success: () => {
+              setPermissionState('granted')
+              try {
+                recorder.start({
+                  duration: 600000,
+                  sampleRate: 44100,
+                  numberOfChannels: 1,
+                  encodeBitRate: 192000,
+                  format: 'mp3'
+                })
+              } catch (e) {
+                try {
+                  recorder.start()
+                } catch (e2) {
+                  showError('启动录音失败，请重试', 'other', e2)
+                }
+              }
+            },
+            fail: (authErr: any) => {
+              setPermissionState('denied')
+              showPermissionError()
+            }
+          })
         }
       })
     } catch (e: any) {
       showError('启动录音失败，请重试', 'other', e)
     }
-  }, [startTimer, handleRecordingStop, showError, options])
+  }, [startTimer, handleRecordingStop, showError, showPermissionError, options])
 
   const startRecordingH5 = useCallback(async () => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
@@ -369,6 +586,7 @@ export function useRecorder(options: UseRecorderOptions = {}) {
       setIsRecording(true)
       revokeAudioUrl()
       setAudioUrl('')
+      setAudioBase64('')
       startTimer()
       options.onStart?.()
 
@@ -400,7 +618,6 @@ export function useRecorder(options: UseRecorderOptions = {}) {
     setErrorMessage('')
 
     if (isRecording) {
-      console.warn('[useRecorder] Already recording')
       return
     }
 
@@ -446,80 +663,73 @@ export function useRecorder(options: UseRecorderOptions = {}) {
     }
   }, [isRecording, startRecording, stopRecording])
 
-  const playAudio = useCallback(() => {
-    if (audioUrl) {
-      const audio = new Audio(audioUrl)
-      audio.play().catch(err => {
-        console.error('[useRecorder] Playback error:', err)
-        Taro.showToast({ title: '播放失败', icon: 'none' })
-      })
-      return audio
-    }
-    return null
-  }, [audioUrl])
-
-  const playAudioFromBase64 = useCallback((base64: string) => {
-    let url = ''
-    if (platform === 'h5') {
-      url = createAudioUrlFromBase64(base64)
-    }
-    if (!url) return null
-
-    const audio = new Audio(url)
-    audio.onended = () => {
-      if (url.startsWith('blob:')) {
-        try { URL.revokeObjectURL(url) } catch (e) {}
-      }
-    }
-    audio.onerror = () => {
-      if (url.startsWith('blob:')) {
-        try { URL.revokeObjectURL(url) } catch (e) {}
-      }
-      Taro.showToast({ title: '播放失败', icon: 'none' })
-    }
-    audio.play().catch(err => {
-      console.error('[useRecorder] Play base64 audio error:', err)
-      if (url.startsWith('blob:')) {
-        try { URL.revokeObjectURL(url) } catch (e) {}
-      }
-      Taro.showToast({ title: '播放失败', icon: 'none' })
-    })
-    return audio
-  }, [createAudioUrlFromBase64, platform])
-
   const resetRecording = useCallback(() => {
-    revokeAudioUrl()
+    stopPlayback()
+    
+    if (platform === 'h5') {
+      revokeAudioUrl()
+    }
+    
     setAudioUrl('')
+    setAudioBase64('')
     setDuration(0)
     setRecordTime(0)
     setIsRecording(false)
     setErrorMessage('')
     stopStream()
     clearTimer()
+    
     weappTempFilePathRef.current = ''
-  }, [revokeAudioUrl, stopStream, clearTimer])
-
-  const loadSavedAudio = useCallback((base64Data: string, savedDuration: number): string | null => {
-    if (base64Data) {
+    weappSavedFilePathRef.current = ''
+    
+    if (h5AudioRef.current) {
       try {
-        let url = ''
-        if (platform === 'h5') {
-          url = createAudioUrlFromBase64(base64Data)
-        }
-        if (url) {
-          setAudioUrl(url)
-          setDuration(savedDuration)
-          return url
-        }
-        setDuration(savedDuration)
-        return null
-      } catch (err) {
-        console.error('[useRecorder] Load saved audio error:', err)
-        return null
-      }
+        h5AudioRef.current.pause()
+        h5AudioRef.current = null
+      } catch (e) {}
     }
-    return null
-  }, [createAudioUrlFromBase64, platform])
+  }, [revokeAudioUrl, stopStream, clearTimer, stopPlayback, platform])
+
+  const loadSavedAudio = useCallback((base64Data: string, savedDuration: number): boolean => {
+    if (!base64Data) return false
+
+    try {
+      stopPlayback()
+      setAudioBase64(base64Data)
+      setDuration(savedDuration)
+
+      if (platform === 'h5') {
+        const url = createAudioUrlFromBase64(base64Data)
+        setAudioUrl(url)
+        return true
+      }
+
+      if (platform === 'weapp') {
+        const fs = Taro.getFileSystemManager()
+        const filePath = `${Taro.env.USER_DATA_PATH}/saved_${Date.now()}.mp3`
+        const base64Content = base64Data.split(',')[1] || base64Data
+        
+        fs.writeFile({
+          filePath,
+          data: base64Content,
+          encoding: 'base64',
+          success: () => {
+            weappSavedFilePathRef.current = filePath
+            setAudioUrl(filePath)
+          },
+          fail: (err: any) => {
+            console.error('[useRecorder] Load saved audio write file failed:', err)
+          }
+        })
+        return true
+      }
+
+      return false
+    } catch (err) {
+      console.error('[useRecorder] Load saved audio error:', err)
+      return false
+    }
+  }, [createAudioUrlFromBase64, stopPlayback, platform])
 
   useEffect(() => {
     if (platform === 'h5' && typeof navigator !== 'undefined' && navigator.permissions && navigator.permissions.query) {
@@ -540,31 +750,45 @@ export function useRecorder(options: UseRecorderOptions = {}) {
     return () => {
       clearTimer()
       stopStream()
+      stopPlayback()
+      
       if (audioUrl && audioUrl.startsWith('blob:')) {
         try { URL.revokeObjectURL(audioUrl) } catch (e) {}
       }
+      
       if (mediaRecorderRef.current && isRecording) {
         try { mediaRecorderRef.current.stop() } catch (e) {}
       }
+      
       if (weappRecorderRef.current && isRecording) {
         try { weappRecorderRef.current.stop() } catch (e) {}
       }
+      
+      if (weappAudioCtxRef.current) {
+        try { weappAudioCtxRef.current.destroy() } catch (e) {}
+      }
+      
+      if (h5AudioRef.current) {
+        try { h5AudioRef.current.pause() } catch (e) {}
+      }
     }
-  }, [audioUrl, isRecording, clearTimer, stopStream])
+  }, [audioUrl, isRecording, clearTimer, stopStream, stopPlayback])
 
   return {
     isRecording,
     recordTime,
     audioUrl,
+    audioBase64,
     duration,
     permissionState,
     errorMessage,
     platform,
+    isPlaying,
     startRecording,
     stopRecording,
     toggleRecording,
     playAudio,
-    playAudioFromBase64,
+    stopPlayback,
     resetRecording,
     loadSavedAudio,
     blobToBase64,
