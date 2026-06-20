@@ -6,7 +6,7 @@ import { getQuizById } from '@/data/quizzes'
 import { useApp } from '@/store/appContext'
 import { calculateProgress } from '@/utils'
 import classnames from 'classnames'
-import { QuizOption, QuizQuestion } from '@/types'
+import { QuizOption, QuizQuestion, QuizProgressItem } from '@/types'
 
 export default function QuizDetailPage() {
   const router = useRouter()
@@ -65,9 +65,26 @@ export default function QuizDetailPage() {
   const currentQuestion = questions[currentQuestionIndex]
   const totalQuestions = questions.length
 
-  const existingResult = useMemo(() => {
+  const existingResult = useMemo((): QuizProgressItem | null => {
     return userProgress.quizProgress[quizId] || null
   }, [userProgress, quizId])
+
+  const getUserAnswerText = useCallback((questionId: string): string => {
+    if (existingResult?.userAnswers) {
+      const optionId = existingResult.userAnswers[questionId]
+      const question = questions.find(q => q.id === questionId)
+      if (question) {
+        const option = question.options.find(o => o.id === optionId)
+        if (option) return option.text
+      }
+    }
+    
+    if (answers[questionId]) {
+      return answers[questionId].text
+    }
+    
+    return '未作答'
+  }, [existingResult, questions, answers])
 
   const handleOptionSelect = useCallback((option: QuizOption) => {
     if (showResult || !currentQuestion) return
@@ -88,10 +105,13 @@ export default function QuizDetailPage() {
       setShowResult(false)
     } else {
       const wrongAnswers: string[] = []
+      const userAnswersMap: Record<string, string> = {}
       let correctCount = 0
       
       questions.forEach(q => {
         const userAnswer = answers[q.id]
+        userAnswersMap[q.id] = userAnswer?.id || ''
+        
         if (userAnswer?.id === q.correctAnswerId) {
           correctCount++
         } else {
@@ -100,7 +120,7 @@ export default function QuizDetailPage() {
       })
       
       const score = Math.round((correctCount / totalQuestions) * 100)
-      updateQuizProgress(quizId, score, wrongAnswers)
+      updateQuizProgress(quizId, score, wrongAnswers, userAnswersMap)
       setShowFinalResult(true)
       
       console.log('[QuizDetail] Quiz completed, score:', score, 'wrong:', wrongAnswers)
@@ -142,29 +162,27 @@ export default function QuizDetailPage() {
   }
 
   if (showFinalResult || isReview) {
-    const result = existingResult || {
-      completed: Object.keys(answers).length === totalQuestions && totalQuestions > 0,
-      score: 0,
-      wrongAnswers: [] as string[]
+    let wrongAnswerIds: string[] = []
+    let hasHistoryData = false
+
+    if (existingResult && existingResult.completed) {
+      wrongAnswerIds = existingResult.wrongAnswers || []
+      hasHistoryData = true
+    } else if (Object.keys(answers).length === totalQuestions && totalQuestions > 0) {
+      wrongAnswerIds = questions
+        .filter(q => {
+          const userAnswer = answers[q.id]
+          return userAnswer?.id !== q.correctAnswerId
+        })
+        .map(q => q.id)
+      hasHistoryData = true
     }
-    
-    if (!existingResult && Object.keys(answers).length === totalQuestions && totalQuestions > 0) {
-      let correctCount = 0
-      const wrongAnswers: string[] = []
-      questions.forEach(q => {
-        const userAnswer = answers[q.id]
-        if (userAnswer?.id === q.correctAnswerId) {
-          correctCount++
-        } else {
-          wrongAnswers.push(q.id)
-        }
-      })
-      result.score = Math.round((correctCount / totalQuestions) * 100)
-      result.wrongAnswers = wrongAnswers
-    }
-    
-    const wrongQuestions = questions.filter(q => result.wrongAnswers.includes(q.id))
-    const allCorrect = result.wrongAnswers.length === 0
+
+    const wrongQuestions = questions.filter(q => wrongAnswerIds.includes(q.id))
+    const allCorrect = wrongAnswerIds.length === 0 && hasHistoryData
+
+    const displayTitle = isReview ? '历史测验回顾' : '测验完成'
+    const displaySubtitle = isReview ? '查看之前做错的题目和正确说法' : '已完成今日班前测验'
 
     return (
       <View className={styles.resultPage}>
@@ -173,10 +191,10 @@ export default function QuizDetailPage() {
             {allCorrect ? '🎉' : '📝'}
           </Text>
           <Text className={styles.resultTitle}>
-            {allCorrect ? '全部正确！' : '测验完成'}
+            {allCorrect ? '全部正确！' : displayTitle}
           </Text>
           <Text className={styles.resultSubtitle}>
-            {isReview ? '查看本次测验易错点' : '已完成今日班前测验'}
+            {displaySubtitle}
           </Text>
 
           {allCorrect ? (
@@ -191,7 +209,7 @@ export default function QuizDetailPage() {
           ) : (
             <View className={styles.mistakeSummary}>
               <Text className={styles.summaryCount}>
-                本次共 <Text className={styles.highlight}>{result.wrongAnswers.length}</Text> 道易错题
+                本次共 <Text className={styles.highlight}>{wrongAnswerIds.length}</Text> 道易错题
               </Text>
               <Text className={styles.summaryHint}>
                 请重点复习以下题目，掌握正确话术
@@ -209,7 +227,7 @@ export default function QuizDetailPage() {
             <View className={styles.mistakeList}>
               {wrongQuestions.map((q, index) => {
                 const correctOption = q.options.find(o => o.id === q.correctAnswerId)
-                const userAnswer = isReview ? null : answers[q.id]
+                const userAnswerText = getUserAnswerText(q.id)
                 
                 return (
                   <View key={q.id} className={styles.mistakeCard}>
@@ -222,14 +240,12 @@ export default function QuizDetailPage() {
                       </Text>
                     </View>
                     
-                    {userAnswer && (
-                      <View className={styles.mistakeRow}>
-                        <Text className={styles.rowLabel}>你的答案</Text>
-                        <Text className={classnames(styles.rowContent, styles.wrong)}>
-                          ✗ {userAnswer.text}
-                        </Text>
-                      </View>
-                    )}
+                    <View className={styles.mistakeRow}>
+                      <Text className={styles.rowLabel}>你的答案</Text>
+                      <Text className={classnames(styles.rowContent, styles.wrong)}>
+                        ✗ {userAnswerText}
+                      </Text>
+                    </View>
                     
                     <View className={styles.mistakeRow}>
                       <Text className={styles.rowLabel}>正确说法</Text>

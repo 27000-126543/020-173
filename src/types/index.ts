@@ -65,7 +65,15 @@ export interface Quiz {
 export interface UserProgress {
   sceneProgress: Record<string, number>
   readCardProgress: Record<string, boolean>
-  quizProgress: Record<string, { completed: boolean; score: number; wrongAnswers: string[] }>
+  quizProgress: Record<string, QuizProgressItem>
+}
+
+export interface QuizProgressItem {
+  completed: boolean
+  score: number
+  wrongAnswers: string[]
+  userAnswers: Record<string, string>
+  completedAt?: string
 }
 
 export interface SelfEvaluation {
@@ -77,7 +85,8 @@ export interface SelfEvaluation {
 
 export interface PhraseRecord {
   phraseId: string
-  audioUrl: string
+  cardId: string
+  audioBase64: string
   duration: number
   createdAt: string
 }

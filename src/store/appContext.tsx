@@ -7,7 +7,7 @@ interface AppContextType {
   userProgress: UserProgress
   updateSceneProgress: (sceneId: string, completedQuestions: number) => void
   updateReadCardProgress: (cardId: string) => void
-  updateQuizProgress: (quizId: string, score: number, wrongAnswers: string[]) => void
+  updateQuizProgress: (quizId: string, score: number, wrongAnswers: string[], userAnswers: Record<string, string>) => void
   selfEvaluations: Record<string, SelfEvaluation>
   updateSelfEvaluation: (phraseId: string, evaluation: SelfEvaluation) => void
   phraseRecords: Record<string, PhraseRecord>
@@ -298,13 +298,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })
   }, [saveProgress])
 
-  const updateQuizProgress = useCallback((quizId: string, score: number, wrongAnswers: string[]) => {
+  const updateQuizProgress = useCallback((quizId: string, score: number, wrongAnswers: string[], userAnswers: Record<string, string>) => {
     setUserProgress(prev => {
       const newProgress = {
         ...prev,
         quizProgress: {
           ...prev.quizProgress,
-          [quizId]: { completed: true, score, wrongAnswers }
+          [quizId]: { 
+            completed: true, 
+            score, 
+            wrongAnswers, 
+            userAnswers,
+            completedAt: new Date().toISOString()
+          }
         }
       }
       saveProgress(newProgress)

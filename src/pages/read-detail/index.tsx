@@ -7,19 +7,25 @@ import { useApp } from '@/store/appContext'
 import { calculateProgress, formatTime } from '@/utils'
 import { useRecorder } from '@/hooks/useRecorder'
 import classnames from 'classnames'
-import { SelfEvaluation } from '@/types'
+import { SelfEvaluation, PhraseRecord } from '@/types'
 
 export default function ReadDetailPage() {
   const router = useRouter()
   const cardId = router.params.id as string
   const card = getReadCardById(cardId)
-  const { updateReadCardProgress, updateSelfEvaluation, selfEvaluations, updatePhraseRecord, phraseRecords } = useApp()
+  const { 
+    updateReadCardProgress, 
+    updateSelfEvaluation, 
+    selfEvaluations, 
+    updatePhraseRecord, 
+    phraseRecords 
+  } = useApp()
 
   const [currentPhraseIndex, setCurrentPhraseIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [completedPhrases, setCompletedPhrases] = useState<Set<string>>(new Set())
   const [showComplete, setShowComplete] = useState(false)
-  const [evaluations, setEvaluations] = useState<Record<string, SelfEvaluation>>({})
+  const [localEvaluations, setLocalEvaluations] = useState<Record<string, SelfEvaluation>>({})
   
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -33,17 +39,24 @@ export default function ReadDetailPage() {
     duration,
     startRecording,
     stopRecording,
-    toggleRecording,
-    playAudio: playRecording,
-    resetRecording
+    resetRecording,
+    loadSavedAudio
   } = useRecorder({
-    onStop: (url, dur) => {
-      if (currentPhrase) {
-        updatePhraseRecord(currentPhrase.id, {
+    onStop: (base64Data, dur) => {
+      if (currentPhrase && card) {
+        const record: PhraseRecord = {
           phraseId: currentPhrase.id,
-          audioUrl: url,
+          cardId: card.id,
+          audioBase64: base64Data,
           duration: dur,
           createdAt: new Date().toISOString()
+        }
+        updatePhraseRecord(currentPhrase.id, record)
+        
+        Taro.showToast({
+          title: '录音已保存',
+          icon: 'success',
+          duration: 1000
         })
       }
     }
@@ -74,18 +87,55 @@ export default function ReadDetailPage() {
       card.phrases.forEach(phrase => {
         if (selfEvaluations[phrase.id]) {
           completed.add(phrase.id)
-          if (phraseRecords[phrase.id]) {
-          }
         }
       })
       setCompletedPhrases(completed)
     }
-  }, [card, selfEvaluations, phraseRecords])
+  }, [card, selfEvaluations])
 
   useEffect(() => {
-    if (currentPhrase && phraseRecords[currentPhrase.id]) {
+    if (currentPhrase) {
+      resetRecording()
+      
+      const savedRecord = phraseRecords[currentPhrase.id]
+      if (savedRecord?.audioBase64) {
+        loadSavedAudio(savedRecord.audioBase64, savedRecord.duration)
+      }
+      
+      const savedEval = selfEvaluations[currentPhrase.id]
+      if (savedEval) {
+        setLocalEvaluations(prev => ({
+          ...prev,
+          [currentPhrase.id]: savedEval
+        }))
+      } else {
+        setLocalEvaluations(prev => {
+          const newEvals = { ...prev }
+          delete newEvals[currentPhrase.id]
+          return newEvals
+        })
+      }
     }
-  }, [currentPhrase, phraseRecords])
+    
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+      setIsPlaying(false)
+    }
+  }, [currentPhrase, phraseRecords, selfEvaluations, resetRecording, loadSavedAudio])
+
+  const hasRecording = useCallback(() => {
+    if (!currentPhrase) return false
+    return !!audioUrl || !!phraseRecords[currentPhrase.id]?.audioBase64
+  }, [currentPhrase, audioUrl, phraseRecords])
+
+  const getCurrentDuration = () => {
+    if (!currentPhrase) return 0
+    if (duration > 0) return duration
+    return phraseRecords[currentPhrase?.id || '']?.duration || 0
+  }
 
   const handlePlayAudio = useCallback(() => {
     console.log('[ReadDetail] Play audio for phrase:', currentPhrase?.id)
@@ -106,8 +156,9 @@ export default function ReadDetailPage() {
   const handlePlayback = useCallback(() => {
     if (!currentPhrase) return
     
-    const record = phraseRecords[currentPhrase.id]
-    if (!record?.audioUrl && !audioUrl) {
+    const savedRecord = phraseRecords[currentPhrase.id]
+    
+    if (!audioUrl && !savedRecord?.audioBase64) {
       Taro.showToast({
         title: '请先录音',
         icon: 'none'
@@ -115,70 +166,104 @@ export default function ReadDetailPage() {
       return
     }
 
-    const urlToPlay = audioUrl || record?.audioUrl
-    if (!urlToPlay) return
-
     if (isPlaying) {
       if (audioRef.current) {
         audioRef.current.pause()
         audioRef.current = null
       }
       setIsPlaying(false)
-    } else {
-      const audio = new Audio(urlToPlay)
-      audioRef.current = audio
-      audio.onended = () => {
-        setIsPlaying(false)
-        audioRef.current = null
-      }
-      audio.play().catch(err => {
-        console.error('[ReadDetail] Playback error:', err)
-        Taro.showToast({
-          title: '播放失败',
-          icon: 'none'
-        })
-        setIsPlaying(false)
-      })
-      setIsPlaying(true)
+      return
     }
-  }, [currentPhrase, phraseRecords, audioUrl, isPlaying])
 
-  const hasRecording = useCallback(() => {
-    if (!currentPhrase) return false
-    return !!audioUrl || !!phraseRecords[currentPhrase.id]?.audioUrl
-  }, [currentPhrase, audioUrl, phraseRecords])
+    let urlToPlay = audioUrl
+    if (!urlToPlay && savedRecord?.audioBase64) {
+      urlToPlay = loadSavedAudio(savedRecord.audioBase64, savedRecord.duration) || ''
+    }
+
+    if (!urlToPlay) {
+      Taro.showToast({
+        title: '播放失败',
+        icon: 'none'
+      })
+      return
+    }
+
+    const audio = new Audio(urlToPlay)
+    audioRef.current = audio
+    audio.onended = () => {
+      setIsPlaying(false)
+      audioRef.current = null
+    }
+    audio.onerror = () => {
+      console.error('[ReadDetail] Audio playback error')
+      Taro.showToast({
+        title: '播放失败',
+        icon: 'none'
+      })
+      setIsPlaying(false)
+      audioRef.current = null
+    }
+    audio.play().catch(err => {
+      console.error('[ReadDetail] Playback error:', err)
+      Taro.showToast({
+        title: '播放失败',
+        icon: 'none'
+      })
+      setIsPlaying(false)
+      audioRef.current = null
+    })
+    setIsPlaying(true)
+  }, [currentPhrase, phraseRecords, audioUrl, isPlaying, loadSavedAudio])
+
+  const getCurrentEvaluation = (): SelfEvaluation | null => {
+    if (!currentPhrase) return null
+    return localEvaluations[currentPhrase.id] || selfEvaluations[currentPhrase.id] || null
+  }
 
   const handleStarRating = useCallback((type: 'speed' | 'pause' | 'politeness', value: number) => {
     if (!currentPhrase) return
-    setEvaluations(prev => ({
-      ...prev,
-      [currentPhrase.id]: {
-        speed: prev[currentPhrase.id]?.speed || 0,
-        pause: prev[currentPhrase.id]?.pause || 0,
-        politeness: prev[currentPhrase.id]?.politeness || 0,
-        comment: prev[currentPhrase.id]?.comment || '',
-        [type]: value
+    
+    setLocalEvaluations(prev => {
+      const current = prev[currentPhrase.id] || {
+        speed: 0,
+        pause: 0,
+        politeness: 0,
+        comment: ''
       }
-    }))
+      return {
+        ...prev,
+        [currentPhrase.id]: {
+          ...current,
+          [type]: value
+        }
+      }
+    })
   }, [currentPhrase])
 
   const handleCommentChange = useCallback((e: any) => {
     if (!currentPhrase) return
-    setEvaluations(prev => ({
-      ...prev,
-      [currentPhrase.id]: {
-        ...prev[currentPhrase.id],
-        speed: prev[currentPhrase.id]?.speed || 0,
-        pause: prev[currentPhrase.id]?.pause || 0,
-        politeness: prev[currentPhrase.id]?.politeness || 0,
-        comment: e.detail.value
+    setLocalEvaluations(prev => {
+      const current = prev[currentPhrase.id] || {
+        speed: 0,
+        pause: 0,
+        politeness: 0,
+        comment: ''
       }
-    }))
+      return {
+        ...prev,
+        [currentPhrase.id]: {
+          ...current,
+          comment: e.detail.value
+        }
+      }
+    })
   }, [currentPhrase])
 
   const handleSaveEvaluation = useCallback(() => {
     if (!currentPhrase) return
-    const evalData = evaluations[currentPhrase.id] || selfEvaluations[currentPhrase.id]
+    
+    const evalData = localEvaluations[currentPhrase.id] || getCurrentEvaluation()
+    
     if (!evalData || evalData.speed === 0 || evalData.pause === 0 || evalData.politeness === 0) {
       Taro.showToast({
         title: '请完成所有评分',
@@ -186,13 +271,23 @@ export default function ReadDetailPage() {
       })
       return
     }
+    
+    if (!hasRecording()) {
+      Taro.showToast({
+        title: '请先录音再自评',
+        icon: 'none'
+      })
+      return
+    }
+    
     updateSelfEvaluation(currentPhrase.id, evalData)
     setCompletedPhrases(prev => new Set(prev).add(currentPhrase.id))
+    
     Taro.showToast({
-      title: '已保存自评',
+      title: '自评已保存',
       icon: 'success'
     })
-  }, [currentPhrase, evaluations, selfEvaluations, updateSelfEvaluation])
+  }, [currentPhrase, localEvaluations, hasRecording, updateSelfEvaluation])
 
   const handleNext = useCallback(() => {
     if (!currentPhrase || !card) return
@@ -207,21 +302,17 @@ export default function ReadDetailPage() {
     
     if (currentPhraseIndex < totalPhrases - 1) {
       setCurrentPhraseIndex(prev => prev + 1)
-      resetRecording()
-      setIsPlaying(false)
     } else {
       updateReadCardProgress(cardId)
       setShowComplete(true)
     }
-  }, [currentPhrase, card, currentPhraseIndex, totalPhrases, completedPhrases, cardId, updateReadCardProgress, resetRecording])
+  }, [currentPhrase, card, currentPhraseIndex, totalPhrases, completedPhrases, cardId, updateReadCardProgress])
 
   const handlePrev = useCallback(() => {
     if (currentPhraseIndex > 0) {
       setCurrentPhraseIndex(prev => prev - 1)
-      resetRecording()
-      setIsPlaying(false)
     }
-  }, [currentPhraseIndex, resetRecording])
+  }, [currentPhraseIndex])
 
   const handleBackToPractice = useCallback(() => {
     Taro.switchTab({
@@ -235,13 +326,8 @@ export default function ReadDetailPage() {
     setIsPlaying(false)
     setCompletedPhrases(new Set())
     setShowComplete(false)
-    setEvaluations({})
+    setLocalEvaluations({})
   }, [resetRecording])
-
-  const getCurrentEvaluation = () => {
-    if (!currentPhrase) return null
-    return evaluations[currentPhrase.id] || selfEvaluations[currentPhrase.id]
-  }
 
   if (!card || !currentPhrase) {
     return (
@@ -253,10 +339,9 @@ export default function ReadDetailPage() {
 
   const progress = calculateProgress(completedPhrases.size, totalPhrases)
   const currentEval = getCurrentEvaluation()
-  const isCurrentCompleted = completedPhrases.has(currentPhrase.id) || selfEvaluations[currentPhrase.id]
-  const currentRecord = phraseRecords[currentPhrase.id]
+  const isCurrentCompleted = completedPhrases.has(currentPhrase.id) || !!selfEvaluations[currentPhrase.id]
+  const currentDuration = getCurrentDuration()
   const hasRecord = hasRecording()
-  const currentDuration = duration || currentRecord?.duration || 0
 
   const renderStars = (type: 'speed' | 'pause' | 'politeness', value: number) => {
     return (
@@ -293,7 +378,8 @@ export default function ReadDetailPage() {
       <View className={styles.phraseList}>
         {card.phrases.map((phrase, index) => {
           const isActive = index === currentPhraseIndex
-          const isCompleted = completedPhrases.has(phrase.id) || selfEvaluations[phrase.id]
+          const isCompleted = completedPhrases.has(phrase.id) || !!selfEvaluations[phrase.id]
+          const hasRecordForPhrase = !!phraseRecords[phrase.id]?.audioBase64
           
           return (
             <View
@@ -314,7 +400,7 @@ export default function ReadDetailPage() {
                     {isCompleted ? '✓' : index + 1}
                   </View>
                   <Text className={styles.phraseStatus}>
-                    {isCompleted ? '已完成' : '待练习'}
+                    {isCompleted ? '已完成' : (hasRecordForPhrase ? '已录音' : '待练习')}
                   </Text>
                 </View>
                 <Button
@@ -341,10 +427,11 @@ export default function ReadDetailPage() {
                     </Button>
                     <View className={styles.recordInfo}>
                       <Text className={styles.recordStatus}>
-                        {isRecording ? '正在录音...' : (hasRecord ? '已录音' : '点击开始录音')}
+                        {isRecording ? '正在录音...' : (hasRecord ? '已录音 ✓' : '点击开始录音')}
                       </Text>
                       <Text className={styles.recordTime}>
-                        {(isRecording || hasRecord) && currentDuration > 0 ? `时长: ${formatTime(currentDuration)}` : ''}
+                        {isRecording ? `已录 ${formatTime(recordTime)}` : 
+                          (hasRecord && currentDuration > 0 ? `时长 ${formatTime(currentDuration)}` : '')}
                       </Text>
                     </View>
                     {hasRecord && (
@@ -404,16 +491,15 @@ export default function ReadDetailPage() {
                         />
                       </View>
                       
-                      {!isCurrentCompleted && (
+                      {!isCurrentCompleted ? (
                         <Button
                           className={styles.saveBtn}
                           onClick={handleSaveEvaluation}
                         >
                           保存自评
                         </Button>
-                      )}
-                      {isCurrentCompleted && (
-                        <Text className={styles.savedHint}>✓ 自评已保存，可重新修改</Text>
+                      ) : (
+                        <Text className={styles.savedHint}>✓ 自评已保存，可修改后重新保存</Text>
                       )}
                     </View>
                   )}
