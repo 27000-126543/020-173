@@ -1,0 +1,428 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  min-height: 100vh;
+  background: $color-bg-page;
+  padding-bottom: $spacing-xxl * 3;
+}
+
+.header {
+  padding: $spacing-lg $page-padding;
+  background: $color-bg-card;
+  margin-bottom: $spacing-md;
+  
+  .cardTitle {
+    font-size: $font-size-xl;
+    font-weight: $font-weight-semibold;
+    color: $color-text-primary;
+    margin-bottom: $spacing-xs;
+  }
+  
+  .cardCategory {
+    display: inline-block;
+    background: $color-tag-bg;
+    color: $color-primary;
+    padding: 4rpx 16rpx;
+    border-radius: $radius-sm;
+    font-size: $font-size-xs;
+  }
+  
+  .progressText {
+    font-size: $font-size-sm;
+    color: $color-text-secondary;
+    margin-top: $spacing-md;
+  }
+  
+  .progressBar {
+    height: 12rpx;
+    background: $color-bg-page;
+    border-radius: $radius-round;
+    overflow: hidden;
+    margin-top: $spacing-sm;
+    
+    .progressFill {
+      height: 100%;
+      background: linear-gradient(90deg, $color-primary 0%, $color-primary-light 100%);
+      border-radius: $radius-round;
+      transition: width $transition-slow;
+    }
+  }
+}
+
+.phraseList {
+  padding: 0 $page-padding;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+}
+
+.phraseCard {
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  box-shadow: $shadow-card;
+  transition: all $transition-base;
+  
+  &.active {
+    border: 4rpx solid $color-primary;
+  }
+  
+  &.completed {
+    background: rgba(44, 182, 125, 0.05);
+  }
+  
+  .phraseHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: $spacing-md;
+    
+    .phraseIndex {
+      display: flex;
+      align-items: center;
+      gap: $spacing-sm;
+      
+      .indexBadge {
+        width: 48rpx;
+        height: 48rpx;
+        border-radius: $radius-round;
+        background: $color-bg-page;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: $font-size-sm;
+        font-weight: $font-weight-semibold;
+        color: $color-text-secondary;
+        
+        .active & {
+          background: $color-primary;
+          color: $color-text-white;
+        }
+        
+        .completed & {
+          background: $color-correct;
+          color: $color-text-white;
+        }
+      }
+      
+      .phraseStatus {
+        font-size: $font-size-xs;
+        color: $color-text-tertiary;
+      }
+    }
+    
+    .playBtn {
+      @include button-reset;
+      width: 64rpx;
+      height: 64rpx;
+      border-radius: $radius-round;
+      background: $color-tag-bg;
+      color: $color-primary;
+      font-size: 28rpx;
+      
+      &:active {
+        opacity: 0.8;
+      }
+    }
+  }
+  
+  .phraseText {
+    font-size: $font-size-lg;
+    color: $color-text-primary;
+    line-height: 1.6;
+    margin-bottom: $spacing-xs;
+  }
+  
+  .phrasePinyin {
+    font-size: $font-size-sm;
+    color: $color-text-tertiary;
+    margin-bottom: $spacing-md;
+  }
+  
+  .recordSection {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-md;
+    padding-top: $spacing-md;
+    border-top: 2rpx solid $color-divider;
+    
+    .recordControls {
+      display: flex;
+      align-items: center;
+      gap: $spacing-md;
+      
+      .recordBtn {
+        @include button-reset;
+        width: 88rpx;
+        height: 88rpx;
+        border-radius: $radius-round;
+        background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+        color: $color-text-white;
+        font-size: 36rpx;
+        
+        &.recording {
+          background: $color-error;
+          animation: pulse 1s infinite;
+        }
+        
+        &:active {
+          opacity: 0.9;
+        }
+      }
+      
+      .recordInfo {
+        flex: 1;
+        
+        .recordStatus {
+          font-size: $font-size-sm;
+          color: $color-text-primary;
+          margin-bottom: 4rpx;
+        }
+        
+        .recordTime {
+          font-size: $font-size-xs;
+          color: $color-text-tertiary;
+        }
+      }
+      
+      .playbackBtn {
+        @include button-reset;
+        width: 64rpx;
+        height: 64rpx;
+        border-radius: $radius-round;
+        background: $color-bg-page;
+        border: 2rpx solid $color-border;
+        color: $color-text-secondary;
+        font-size: 24rpx;
+        
+        &:active {
+          opacity: 0.8;
+        }
+        
+        &.playing {
+          background: $color-primary;
+          border-color: $color-primary;
+          color: $color-text-white;
+        }
+      }
+    }
+    
+    .selfEvalSection {
+      background: $color-bg-page;
+      border-radius: $radius-md;
+      padding: $spacing-md;
+      
+      .evalTitle {
+        font-size: $font-size-sm;
+        font-weight: $font-weight-medium;
+        color: $color-text-primary;
+        margin-bottom: $spacing-md;
+      }
+      
+      .evalItems {
+        display: flex;
+        flex-direction: column;
+        gap: $spacing-md;
+        
+        .evalItem {
+          .evalLabel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: $spacing-xs;
+            
+            .labelText {
+              font-size: $font-size-xs;
+              color: $color-text-secondary;
+            }
+            
+            .valueText {
+              font-size: $font-size-xs;
+              color: $color-primary;
+              font-weight: $font-weight-medium;
+            }
+          }
+          
+          .evalStars {
+            display: flex;
+            gap: $spacing-sm;
+            
+            .star {
+              @include button-reset;
+              width: 48rpx;
+              height: 48rpx;
+              background: transparent;
+              font-size: 32rpx;
+              
+              &:active {
+                opacity: 0.8;
+              }
+            }
+          }
+        }
+      }
+      
+      .evalComment {
+        margin-top: $spacing-md;
+        
+        .commentInput {
+          width: 100%;
+          min-height: 120rpx;
+          padding: $spacing-sm;
+          background: $color-bg-card;
+          border: 2rpx solid $color-border;
+          border-radius: $radius-md;
+          font-size: $font-size-xs;
+          color: $color-text-primary;
+          box-sizing: border-box;
+        }
+      }
+      
+      .saveBtn {
+        @include button-reset;
+        width: 100%;
+        height: $button-height-md;
+        background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+        border-radius: $radius-button;
+        color: $color-text-white;
+        font-size: $font-size-sm;
+        font-weight: $font-weight-medium;
+        margin-top: $spacing-md;
+        
+        &:active {
+          opacity: 0.9;
+        }
+      }
+    }
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.bottomBar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: $color-bg-card;
+  padding: $spacing-lg $page-padding;
+  padding-bottom: calc(#{$spacing-lg} + env(safe-area-inset-bottom));
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+  display: flex;
+  gap: $spacing-md;
+  
+  .nextBtn {
+    @include button-reset;
+    flex: 1;
+    height: $button-height-lg;
+    background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+    border-radius: $radius-button;
+    color: $color-text-white;
+    font-size: $font-size-md;
+    font-weight: $font-weight-medium;
+    
+    &:active {
+      opacity: 0.9;
+      transform: scale(0.98);
+    }
+    
+    &:disabled {
+      background: $color-border;
+      color: $color-text-tertiary;
+    }
+  }
+  
+  .prevBtn {
+    @include button-reset;
+    height: $button-height-lg;
+    padding: 0 $spacing-xl;
+    background: $color-bg-page;
+    border: 2rpx solid $color-border;
+    border-radius: $radius-button;
+    color: $color-text-secondary;
+    font-size: $font-size-md;
+    
+    &:active {
+      opacity: 0.9;
+    }
+    
+    &:disabled {
+      opacity: 0.5;
+    }
+  }
+}
+
+.completeModal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  
+  .modalContent {
+    width: 600rpx;
+    background: $color-bg-card;
+    border-radius: $radius-xl;
+    padding: $spacing-xxl;
+    text-align: center;
+    margin: 0 $page-padding;
+    
+    .modalIcon {
+      font-size: 120rpx;
+      margin-bottom: $spacing-lg;
+    }
+    
+    .modalTitle {
+      font-size: $font-size-xl;
+      font-weight: $font-weight-semibold;
+      color: $color-text-primary;
+      margin-bottom: $spacing-sm;
+    }
+    
+    .modalDesc {
+      font-size: $font-size-md;
+      color: $color-text-secondary;
+      margin-bottom: $spacing-xl;
+      line-height: 1.6;
+    }
+    
+    .modalButtons {
+      display: flex;
+      gap: $spacing-md;
+      
+      .modalBtn {
+        @include button-reset;
+        flex: 1;
+        height: $button-height-md;
+        border-radius: $radius-button;
+        font-size: $font-size-md;
+        
+        &.primary {
+          background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+          color: $color-text-white;
+        }
+        
+        &.secondary {
+          background: $color-bg-page;
+          border: 2rpx solid $color-border;
+          color: $color-text-secondary;
+        }
+      }
+    }
+  }
+}

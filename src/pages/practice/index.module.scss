@@ -1,0 +1,165 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  min-height: 100vh;
+  background: $color-bg-page;
+  padding-bottom: $spacing-xxl;
+}
+
+.header {
+  background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+  padding: $spacing-xl $page-padding $spacing-xxl;
+  color: $color-text-white;
+  border-radius: 0 0 $radius-xl $radius-xl;
+}
+
+.pageTitle {
+  font-size: $font-size-xxl;
+  font-weight: $font-weight-semibold;
+  margin-bottom: $spacing-xs;
+}
+
+.pageSub {
+  font-size: $font-size-md;
+  opacity: 0.9;
+}
+
+.content {
+  padding: 0 $page-padding;
+  margin-top: -$spacing-lg;
+}
+
+.categoryTabs {
+  display: flex;
+  gap: $spacing-sm;
+  margin-bottom: $spacing-lg;
+  overflow-x: auto;
+  padding-bottom: $spacing-xs;
+  @include scroll-x-container;
+}
+
+.categoryTab {
+  @include scroll-x-item(auto);
+  @include button-reset;
+  height: 64rpx;
+  padding: 0 $spacing-lg;
+  background: $color-bg-card;
+  border-radius: $radius-button;
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  white-space: nowrap;
+  transition: all $transition-base;
+  
+  &:active {
+    opacity: 0.9;
+  }
+  
+  &.active {
+    background: $color-primary;
+    color: $color-text-white;
+  }
+}
+
+.cardList {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+}
+
+.cardItem {
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  box-shadow: $shadow-card;
+  transition: all $transition-base;
+  
+  &:active {
+    opacity: 0.9;
+    transform: scale(0.99);
+  }
+  
+  .cardHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: $spacing-md;
+    
+    .cardTitle {
+      font-size: $font-size-lg;
+      font-weight: $font-weight-semibold;
+      color: $color-text-primary;
+      flex: 1;
+      margin-right: $spacing-md;
+    }
+    
+    .completedBadge {
+      background: $color-tag-bg;
+      color: $color-primary;
+      padding: 4rpx 16rpx;
+      border-radius: $radius-sm;
+      font-size: $font-size-xs;
+      display: flex;
+      align-items: center;
+      gap: 4rpx;
+    }
+  }
+  
+  .cardCategory {
+    display: inline-block;
+    background: $color-bg-page;
+    color: $color-text-secondary;
+    padding: 4rpx 16rpx;
+    border-radius: $radius-sm;
+    font-size: $font-size-xs;
+    margin-bottom: $spacing-sm;
+  }
+  
+  .cardDesc {
+    font-size: $font-size-sm;
+    color: $color-text-secondary;
+    line-height: 1.6;
+    margin-bottom: $spacing-md;
+  }
+  
+  .cardFooter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    
+    .phraseCount {
+      font-size: $font-size-xs;
+      color: $color-text-tertiary;
+    }
+    
+    .startBtn {
+      @include button-reset;
+      height: 56rpx;
+      padding: 0 $spacing-lg;
+      background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+      border-radius: $radius-button;
+      color: $color-text-white;
+      font-size: $font-size-xs;
+      transition: all $transition-base;
+      
+      &:active {
+        opacity: 0.9;
+        transform: scale(0.95);
+      }
+    }
+  }
+}
+
+.emptyState {
+  text-align: center;
+  padding: $spacing-xxl * 2 $page-padding;
+  
+  .emptyIcon {
+    font-size: 120rpx;
+    margin-bottom: $spacing-lg;
+  }
+  
+  .emptyText {
+    font-size: $font-size-md;
+    color: $color-text-secondary;
+  }
+}

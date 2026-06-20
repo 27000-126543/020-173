@@ -1,0 +1,440 @@
+@use '@/styles/variables.scss' as *;
+
+.page {
+  min-height: 100vh;
+  background: $color-bg-page;
+  padding-bottom: $spacing-xxl * 3;
+}
+
+.header {
+  padding: $spacing-lg $page-padding;
+  background: $color-bg-card;
+  margin-bottom: $spacing-md;
+  
+  .quizTitle {
+    font-size: $font-size-xl;
+    font-weight: $font-weight-semibold;
+    color: $color-text-primary;
+    margin-bottom: $spacing-xs;
+  }
+  
+  .quizDesc {
+    font-size: $font-size-sm;
+    color: $color-text-secondary;
+    margin-bottom: $spacing-md;
+  }
+  
+  .progressText {
+    font-size: $font-size-sm;
+    color: $color-text-secondary;
+    margin-bottom: $spacing-sm;
+  }
+  
+  .progressBar {
+    height: 12rpx;
+    background: $color-bg-page;
+    border-radius: $radius-round;
+    overflow: hidden;
+    
+    .progressFill {
+      height: 100%;
+      background: linear-gradient(90deg, $color-primary 0%, $color-primary-light 100%);
+      border-radius: $radius-round;
+      transition: width $transition-slow;
+    }
+  }
+}
+
+.questionCard {
+  margin: 0 $page-padding $spacing-lg;
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  box-shadow: $shadow-card;
+  
+  .questionLabel {
+    display: inline-block;
+    background: $color-tag-bg;
+    color: $color-primary;
+    padding: 4rpx 16rpx;
+    border-radius: $radius-sm;
+    font-size: $font-size-xs;
+    margin-bottom: $spacing-md;
+  }
+  
+  .questionText {
+    font-size: $font-size-lg;
+    color: $color-text-primary;
+    line-height: 1.6;
+    margin-bottom: $spacing-lg;
+  }
+}
+
+.optionList {
+  padding: 0 $page-padding;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+}
+
+.optionItem {
+  @include button-reset;
+  width: 100%;
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  text-align: left;
+  box-shadow: $shadow-card;
+  transition: all $transition-base;
+  
+  &:active {
+    opacity: 0.9;
+    transform: scale(0.99);
+  }
+  
+  &.selected {
+    border: 4rpx solid $color-primary;
+    background: rgba(44, 182, 125, 0.05);
+    
+    .optionIndex {
+      background: $color-primary;
+      color: $color-text-white;
+    }
+  }
+  
+  &.correct {
+    border: 4rpx solid $color-correct;
+    background: rgba(0, 180, 42, 0.05);
+    
+    .optionIndex {
+      background: $color-correct;
+      color: $color-text-white;
+    }
+  }
+  
+  &.incorrect {
+    border: 4rpx solid $color-incorrect;
+    background: rgba(245, 63, 63, 0.05);
+    
+    .optionIndex {
+      background: $color-incorrect;
+      color: $color-text-white;
+    }
+  }
+  
+  .optionContent {
+    display: flex;
+    align-items: flex-start;
+    gap: $spacing-md;
+    
+    .optionIndex {
+      width: 48rpx;
+      height: 48rpx;
+      border-radius: $radius-round;
+      background: $color-bg-page;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: $font-size-sm;
+      font-weight: $font-weight-semibold;
+      color: $color-text-secondary;
+      flex-shrink: 0;
+    }
+    
+    .optionText {
+      flex: 1;
+      font-size: $font-size-md;
+      color: $color-text-primary;
+      line-height: 1.6;
+      padding-top: 4rpx;
+    }
+    
+    .optionIcon {
+      font-size: 32rpx;
+    }
+  }
+}
+
+.explanationCard {
+  margin: $spacing-lg $page-padding 0;
+  background: $color-bg-card;
+  border-radius: $radius-lg;
+  padding: $spacing-lg;
+  box-shadow: $shadow-card;
+  border-left: 8rpx solid $color-primary;
+  
+  .explanationLabel {
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: $color-primary;
+    margin-bottom: $spacing-sm;
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+  }
+  
+  .explanationText {
+    font-size: $font-size-sm;
+    color: $color-text-secondary;
+    line-height: 1.7;
+  }
+}
+
+.bottomBar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: $color-bg-card;
+  padding: $spacing-lg $page-padding;
+  padding-bottom: calc(#{$spacing-lg} + env(safe-area-inset-bottom));
+  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+  display: flex;
+  gap: $spacing-md;
+  
+  .nextBtn {
+    @include button-reset;
+    flex: 1;
+    height: $button-height-lg;
+    background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+    border-radius: $radius-button;
+    color: $color-text-white;
+    font-size: $font-size-md;
+    font-weight: $font-weight-medium;
+    
+    &:active {
+      opacity: 0.9;
+      transform: scale(0.98);
+    }
+    
+    &:disabled {
+      background: $color-border;
+      color: $color-text-tertiary;
+    }
+  }
+  
+  .exitBtn {
+    @include button-reset;
+    height: $button-height-lg;
+    padding: 0 $spacing-xl;
+    background: $color-bg-page;
+    border: 2rpx solid $color-border;
+    border-radius: $radius-button;
+    color: $color-text-secondary;
+    font-size: $font-size-md;
+    
+    &:active {
+      opacity: 0.9;
+    }
+  }
+}
+
+.resultPage {
+  padding: $spacing-xl $page-padding;
+  
+  .resultHeader {
+    text-align: center;
+    padding: $spacing-xxl 0;
+    
+    .resultIcon {
+      font-size: 160rpx;
+      margin-bottom: $spacing-lg;
+    }
+    
+    .resultTitle {
+      font-size: $font-size-xxl;
+      font-weight: $font-weight-bold;
+      color: $color-text-primary;
+      margin-bottom: $spacing-xs;
+    }
+    
+    .resultSubtitle {
+      font-size: $font-size-md;
+      color: $color-text-secondary;
+      margin-bottom: $spacing-xl;
+    }
+    
+    .scoreCircle {
+      width: 240rpx;
+      height: 240rpx;
+      border-radius: 50%;
+      background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto $spacing-xl;
+      
+      .scoreNumber {
+        font-size: 80rpx;
+        font-weight: $font-weight-bold;
+        color: $color-text-white;
+        line-height: 1;
+      }
+      
+      .scoreLabel {
+        font-size: $font-size-sm;
+        color: rgba(255, 255, 255, 0.9);
+        margin-top: $spacing-xs;
+      }
+    }
+    
+    .scoreBreakdown {
+      display: flex;
+      justify-content: center;
+      gap: $spacing-xl * 2;
+      
+      .breakdownItem {
+        text-align: center;
+        
+        .breakdownNumber {
+          font-size: $font-size-xl;
+          font-weight: $font-weight-semibold;
+          color: $color-text-primary;
+        }
+        
+        .breakdownLabel {
+          font-size: $font-size-xs;
+          color: $color-text-tertiary;
+          margin-top: 4rpx;
+        }
+      }
+    }
+  }
+  
+  .mistakesSection {
+    margin-top: $spacing-xl;
+    
+    .sectionTitle {
+      font-size: $font-size-lg;
+      font-weight: $font-weight-semibold;
+      color: $color-text-primary;
+      margin-bottom: $spacing-md;
+      display: flex;
+      align-items: center;
+      gap: $spacing-xs;
+    }
+    
+    .mistakesCount {
+      background: rgba(245, 63, 63, 0.1);
+      color: $color-error;
+      padding: 4rpx 16rpx;
+      border-radius: $radius-sm;
+      font-size: $font-size-xs;
+    }
+    
+    .mistakeList {
+      display: flex;
+      flex-direction: column;
+      gap: $spacing-md;
+    }
+    
+    .mistakeCard {
+      background: $color-bg-card;
+      border-radius: $radius-lg;
+      padding: $spacing-lg;
+      box-shadow: $shadow-card;
+      border-left: 8rpx solid $color-warning;
+      
+      .mistakeQuestion {
+        font-size: $font-size-md;
+        font-weight: $font-weight-medium;
+        color: $color-text-primary;
+        margin-bottom: $spacing-md;
+        line-height: 1.5;
+      }
+      
+      .mistakeRow {
+        margin-bottom: $spacing-sm;
+        
+        .rowLabel {
+          font-size: $font-size-xs;
+          color: $color-text-tertiary;
+          margin-bottom: 4rpx;
+        }
+        
+        .rowContent.wrong {
+          color: $color-error;
+          text-decoration: line-through;
+        }
+        
+        .rowContent.correct {
+          color: $color-correct;
+        }
+        
+        .rowContent {
+          font-size: $font-size-sm;
+          line-height: 1.5;
+        }
+      }
+      
+      .mistakeExplanation {
+        background: $color-bg-page;
+        border-radius: $radius-md;
+        padding: $spacing-md;
+        margin-top: $spacing-md;
+        
+        .explanationLabel {
+          font-size: $font-size-xs;
+          font-weight: $font-weight-medium;
+          color: $color-primary;
+          margin-bottom: 4rpx;
+        }
+        
+        .explanationText {
+          font-size: $font-size-xs;
+          color: $color-text-secondary;
+          line-height: 1.6;
+        }
+      }
+    }
+    
+    .noMistakes {
+      background: $color-bg-card;
+      border-radius: $radius-lg;
+      padding: $spacing-xxl;
+      text-align: center;
+      
+      .noMistakesIcon {
+        font-size: 80rpx;
+        margin-bottom: $spacing-md;
+      }
+      
+      .noMistakesText {
+        font-size: $font-size-md;
+        color: $color-text-secondary;
+      }
+    }
+  }
+  
+  .actionButtons {
+    display: flex;
+    gap: $spacing-md;
+    margin-top: $spacing-xxl;
+    
+    .actionBtn {
+      @include button-reset;
+      flex: 1;
+      height: $button-height-lg;
+      border-radius: $radius-button;
+      font-size: $font-size-md;
+      font-weight: $font-weight-medium;
+      
+      &:active {
+        opacity: 0.9;
+        transform: scale(0.98);
+      }
+      
+      &.primary {
+        background: linear-gradient(135deg, $color-primary 0%, $color-primary-light 100%);
+        color: $color-text-white;
+      }
+      
+      &.secondary {
+        background: $color-bg-card;
+        border: 2rpx solid $color-border;
+        color: $color-text-secondary;
+      }
+    }
+  }
+}
